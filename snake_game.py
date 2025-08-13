@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Terminal Snake Game
+Terminal Snake Game - Updated Version
 A classic Snake game implementation for the terminal using Python's curses library.
+Features: Super food that gives +5 length and +50 points
 """
 
 import curses
@@ -27,8 +28,9 @@ class SnakeGame:
         curses.start_color()
         curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Snake
         curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)    # Food
-        curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK) # Score
+        curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK) # Score & Super food
         curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLACK)  # Border
+        curses.init_pair(5, curses.COLOR_MAGENTA, curses.COLOR_BLACK) # Super food alternative
         
         # Get screen dimensions
         self.height, self.width = self.stdscr.getmaxyx()
@@ -52,6 +54,10 @@ class SnakeGame:
         # Score
         self.score = 0
         
+        # Super food system
+        self.super_food = None
+        self.super_food_timer = 0
+        
         # Generate first food
         self.generate_food()
         
@@ -61,8 +67,24 @@ class SnakeGame:
             food_y = random.randint(1, self.game_height - 1)
             food_x = random.randint(1, self.game_width - 1)
             if (food_y, food_x) not in self.snake:
-                self.food = (food_y, food_x)
-                break
+                # Make sure super food doesn't overlap
+                if not self.super_food or (food_y, food_x) != self.super_food:
+                    self.food = (food_y, food_x)
+                    break
+                    
+    def generate_super_food(self):
+        """Generate super food occasionally"""
+        if random.randint(1, 8) == 1:  # 12.5% chance (1 in 8)
+            attempts = 0
+            while attempts < 10:  # Prevent infinite loop
+                food_y = random.randint(1, self.game_height - 1)
+                food_x = random.randint(1, self.game_width - 1)
+                if ((food_y, food_x) not in self.snake and 
+                    (food_y, food_x) != self.food):
+                    self.super_food = (food_y, food_x)
+                    self.super_food_timer = 150  # Disappears after 150 moves
+                    break
+                attempts += 1
                 
     def draw_border(self):
         """Draw game border"""
@@ -110,13 +132,25 @@ class SnakeGame:
                     pass
                     
     def draw_food(self):
-        """Draw the food"""
+        """Draw the regular food"""
         y, x = self.food
         if 0 < y < self.game_height and 0 < x < self.game_width:
             try:
-                self.stdscr.addch(y, x, '*', curses.color_pair(2) | curses.A_BOLD)
+                # Changed from '*' to '@' for better visibility
+                self.stdscr.addch(y, x, 'ø', curses.color_pair(2) | curses.A_BOLD)
             except curses.error:
                 pass
+                
+    def draw_super_food(self):
+        """Draw the super food"""
+        if self.super_food:
+            y, x = self.super_food
+            if 0 < y < self.game_height and 0 < x < self.game_width:
+                try:
+                    # Super food is a yellow '%' symbol
+                    self.stdscr.addch(y, x, 'π', curses.color_pair(3) | curses.A_BOLD)
+                except curses.error:
+                    pass
             
     def handle_input(self):
         """Handle keyboard input and manage speed boost"""
@@ -175,13 +209,31 @@ class SnakeGame:
         # Add new head
         self.snake.appendleft(new_head)
         
-        # Check if food eaten
+        # Check if super food eaten
+        if self.super_food and new_head == self.super_food:
+            self.score += 50  # 50 points for super food
+            # Grow snake by 5 segments (don't remove tail for next 4 moves)
+            for _ in range(4):  # Already added 1 head, add 4 more body segments
+                self.snake.append(self.snake[-1])
+            self.super_food = None
+            self.super_food_timer = 0
+            self.generate_super_food()  # Chance for new super food
+            return True
+            
+        # Check if regular food eaten
         if new_head == self.food:
-            self.score += 10
+            self.score += 10  # 10 points for regular food
             self.generate_food()
+            self.generate_super_food()  # Chance for super food when eating regular food
         else:
             # Remove tail (snake doesn't grow)
             self.snake.pop()
+            
+        # Handle super food timer
+        if self.super_food:
+            self.super_food_timer -= 1
+            if self.super_food_timer <= 0:
+                self.super_food = None
             
         return True
         
@@ -192,15 +244,18 @@ class SnakeGame:
         # Center the game over message
         game_over_msg = "GAME OVER!"
         final_score_msg = f"Final Score: {self.score}"
+        snake_length_msg = f"Snake Length: {len(self.snake)}"
         restart_msg = "Press R to restart or Q to quit"
         
         center_y = self.height // 2
         center_x = self.width // 2
         
-        self.stdscr.addstr(center_y - 1, center_x - len(game_over_msg) // 2, 
+        self.stdscr.addstr(center_y - 2, center_x - len(game_over_msg) // 2, 
                           game_over_msg, curses.color_pair(2) | curses.A_BOLD)
-        self.stdscr.addstr(center_y, center_x - len(final_score_msg) // 2, 
+        self.stdscr.addstr(center_y - 1, center_x - len(final_score_msg) // 2, 
                           final_score_msg, curses.color_pair(3))
+        self.stdscr.addstr(center_y, center_x - len(snake_length_msg) // 2, 
+                          snake_length_msg, curses.color_pair(3))
         self.stdscr.addstr(center_y + 2, center_x - len(restart_msg) // 2, 
                           restart_msg)
         
@@ -224,6 +279,7 @@ class SnakeGame:
             self.draw_border()
             self.draw_snake()
             self.draw_food()
+            self.draw_super_food()  # Draw super food if it exists
             self.draw_score()
             
             # Refresh screen
