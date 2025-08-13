@@ -1,4 +1,5 @@
 # 🐍 Terminal Snake Game
+PYTHON using PYTHON
 
 A **classic Snake game** recreated in Python, running entirely inside your terminal!  
 Built using the `curses` library for real-time rendering and controls — no graphics libraries required.  
